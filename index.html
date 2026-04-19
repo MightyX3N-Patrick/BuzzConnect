@@ -120,31 +120,22 @@ a { color: inherit; text-decoration: none; }
 .log-err  { color: #f87171; }
 
 
-/* ── Installer popup ── */
-.popup-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 200; align-items: center; justify-content: center; }
-.popup-overlay.show { display: flex; }
-.popup { background: var(--surface); border: 1px solid var(--border2); border-radius: 14px; width: 460px; padding: 28px; }
-.popup h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
-.popup-sub { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
-.dep-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
-.dep-row { background: var(--surface2); border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; }
-.dep-icon { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
-.dep-icon.ok   { background: #0d2a1a; color: var(--green); border: 1px solid #1e5c32; }
-.dep-icon.miss { background: #2a0d0d; color: #f87171; border: 1px solid #5a1515; }
-.dep-name { font-size: 13px; font-weight: 500; flex: 1; }
-.dep-sub  { font-size: 11px; color: var(--muted); margin-top: 2px; }
-.dep-status { font-size: 11px; font-weight: 500; }
-.st-ok   { color: var(--green); }
-.st-miss { color: #f87171; }
-.prog-area { margin-bottom: 16px; display: none; }
-.prog-label  { font-size: 11px; color: var(--muted2); margin-bottom: 6px; }
-.prog-bar    { background: var(--surface2); border-radius: 100px; height: 5px; overflow: hidden; }
-.prog-fill   { background: var(--red); height: 100%; width: 0%; transition: width .4s; border-radius: 100px; }
-.prog-status { font-size: 10px; color: var(--muted); margin-top: 5px; }
-.popup-btns  { display: flex; gap: 8px; justify-content: flex-end; }
-.btn-skip    { padding: 9px 16px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--border2); color: var(--muted); font-size: 12px; cursor: pointer; }
-.btn-install { padding: 9px 24px; border-radius: 8px; background: var(--red); border: none; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
-.btn-done    { padding: 9px 24px; border-radius: 8px; background: #1e6b3a; border: none; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; display: none; }
+/* ── Setup tab ── */
+.setup-list { display: flex; flex-direction: column; gap: 10px; max-width: 600px; }
+.setup-row { background: var(--surface); border: 1px solid var(--border2); border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
+.setup-icon { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+.setup-icon.ok   { background: #0d2a1a; color: var(--green); border: 1px solid #1e5c32; }
+.setup-icon.miss { background: #2a0d0d; color: #f87171; border: 1px solid #5a1515; }
+.setup-name { font-size: 13px; font-weight: 500; }
+.setup-sub  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.setup-status { font-size: 11px; font-weight: 500; margin-left: auto; padding-right: 12px; }
+.setup-btns { display: flex; gap: 6px; flex-shrink: 0; }
+.setup-btn { padding: 5px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; border: 1px solid var(--border2); background: var(--surface2); color: var(--muted2); transition: background .15s, color .15s; }
+.setup-btn:hover { background: var(--border2); color: var(--text); }
+.setup-btn.install { background: var(--red); border-color: var(--red); color: #fff; }
+.setup-btn.install:hover { background: #c0392b; }
+.setup-btn.remove { background: var(--surface2); border-color: #5a1515; color: #f87171; }
+.setup-btn.remove:hover { background: #2a0d0d; }
 </style>
 </head>
 <body>
@@ -169,6 +160,7 @@ a { color: inherit; text-decoration: none; }
   <div class="tab" data-tab="api">API</div>
   <div class="tab" data-tab="log">Log</div>
   <div class="tab" data-tab="pad">Phone Pad</div>
+  <div class="tab" data-tab="setup">Setup</div>
 </div>
 
 <div class="content">
@@ -265,6 +257,13 @@ a { color: inherit; text-decoration: none; }
     </div>
   </div>
 
+  <!-- SETUP -->
+  <div id="tab-setup" class="panel">
+    <div class="setup-list" id="setup-list">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Checking...</div>
+    </div>
+  </div>
+
   <!-- LOG -->
   <div id="tab-log" class="panel">
     <div class="log-box" id="log-box"></div>
@@ -316,7 +315,7 @@ function connect() {
   ws.onclose = () => { setStatus('', 'Reconnecting...'); setTimeout(connect, 2000); };
   ws.onmessage = e => {
     const msg = JSON.parse(e.data);
-    if (msg.type === 'state')  { state = msg; if (state.local_ip) localIp = state.local_ip; render(); checkMissing(); }
+    if (msg.type === 'state')  { state = msg; if (state.local_ip) localIp = state.local_ip; render(); }
     if (msg.type === 'button') onButton(msg);
     if (msg.type === 'log')    appendLog(msg.msg);
   };
@@ -575,7 +574,8 @@ function copyPadUrl() {
 
 document.querySelectorAll('.tab').forEach(t => {
   t.addEventListener('click', () => {
-    if (t.dataset.tab === 'pad') setTimeout(renderQR, 50);
+    if (t.dataset.tab === 'pad')   setTimeout(renderQR, 50);
+    if (t.dataset.tab === 'setup') setTimeout(renderSetup, 50);
   });
 });
 
@@ -589,8 +589,9 @@ function checkMissing() {
   const LABELS = {
     pybuzzers:  {name:'pybuzzers',       sub:'Buzz controller driver'},
     vgamepad:   {name:'vgamepad',        sub:'Virtual Xbox controller output'},
-    pywebview:  {name:'pywebview',       sub:'Native app window'},
     websockets: {name:'websockets',      sub:'Real-time communication'},
+    pystray:    {name:'pystray',          sub:'System tray icon'},
+    Pillow:     {name:'Pillow',           sub:'Image library for tray icon'},
     vigem:      {name:'ViGEmBus driver', sub:'Required for virtual Xbox controllers'},
   };
   installQueue = missing;
@@ -613,8 +614,9 @@ function closePopup() {
 const INSTALL_STEPS = {
   pybuzzers:  [{l:'Installing pybuzzers...',  s:'Downloading package...', p:'50%'},{l:'Installing pybuzzers...',  s:'Done.', p:'100%'}],
   vgamepad:   [{l:'Installing vgamepad...',   s:'Downloading package...', p:'50%'},{l:'Installing vgamepad...',   s:'Done.', p:'100%'}],
-  pywebview:  [{l:'Installing pywebview...',  s:'Downloading package...', p:'50%'},{l:'Installing pywebview...',  s:'Done.', p:'100%'}],
-  websockets: [{l:'Installing websockets...', s:'Downloading package...', p:'50%'},{l:'Installing websockets...',  s:'Done.', p:'100%'}],
+  pystray:    [{l:'Installing pystray...',    s:'Downloading package...', p:'50%'},{l:'Installing pystray...',    s:'Done.', p:'100%'}],
+  Pillow:     [{l:'Installing Pillow...',     s:'Downloading package...', p:'50%'},{l:'Installing Pillow...',     s:'Done.', p:'100%'}],
+  websockets: [{l:'Installing websockets...',  s:'Downloading package...', p:'50%'},{l:'Installing websockets...',  s:'Done.', p:'100%'}],
   vigem:      [{l:'Downloading ViGEmBus...',  s:'Fetching latest release...', p:'40%'},{l:'Installing ViGEmBus...', s:'Running installer...', p:'80%'},{l:'ViGEmBus installed.', s:'Done.', p:'100%'}],
 };
 
@@ -660,27 +662,62 @@ function installNext() {
   nextStep();
 }
 
+// ── Setup tab ────────────────────────────────────────────────────────────────────
+const SETUP_ITEMS = [
+  {key:'pybuzzers',  name:'pybuzzers',       sub:'Buzz controller driver',             type:'pip'},
+  {key:'vgamepad',   name:'vgamepad',         sub:'Virtual Xbox controller output',     type:'pip'},
+  {key:'websockets', name:'websockets',       sub:'Real-time communication',            type:'pip'},
+  {key:'pystray',    name:'pystray',           sub:'System tray icon',                      type:'pip'},
+  {key:'Pillow',     name:'Pillow',            sub:'Image library for tray icon',           type:'pip'},
+  {key:'vigem',      name:'ViGEmBus driver',  sub:'Required for virtual Xbox controllers', type:'driver'},
+];
+
+function renderSetup() {
+  fetch(API + '/api/status').then(r => r.json()).then(s => {
+    const missing = [...(s.missing || [])];
+    if (!s.vigem_ok) missing.push('vigem');
+    const list = document.getElementById('setup-list');
+    list.innerHTML = SETUP_ITEMS.map(item => {
+      const installed = !missing.includes(item.key);
+      return `<div class="setup-row">
+        <div class="setup-icon ${installed?'ok':'miss'}">${installed?'✓':'✗'}</div>
+        <div>
+          <div class="setup-name">${item.name}</div>
+          <div class="setup-sub">${item.sub}</div>
+        </div>
+        <span class="setup-status ${installed?'st-ok':'st-miss'}" id="ss-${item.key}">${installed?'Installed':'Missing'}</span>
+        <div class="setup-btns">
+          ${installed ? `<button class="setup-btn remove" onclick="setupAction('remove','${item.key}')">Remove</button>` : ''}
+          <button class="setup-btn ${installed?'':'install'}" onclick="setupAction('install','${item.key}')" id="sb-${item.key}">${installed?'Reinstall':'Install'}</button>
+        </div>
+      </div>`;
+    }).join('');
+  }).catch(() => {
+    document.getElementById('setup-list').innerHTML = '<div style="font-size:12px;color:var(--muted)">Could not connect to app.</div>';
+  });
+}
+
+function setupAction(action, pkg) {
+  const btn = document.getElementById('sb-' + pkg);
+  const status = document.getElementById('ss-' + pkg);
+  if (btn) { btn.textContent = action === 'remove' ? 'Removing...' : 'Installing...'; btn.disabled = true; }
+  if (status) { status.textContent = action === 'remove' ? 'Removing...' : 'Installing...'; }
+
+  const endpoint = action === 'remove' ? '/api/uninstall' : '/api/install';
+  fetch(API + endpoint, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({package: pkg}),
+  }).then(() => {
+    setTimeout(renderSetup, 2000);
+  }).catch(() => {
+    if (btn) { btn.textContent = 'Failed'; btn.disabled = false; }
+  });
+}
+
 // ── Boot ───────────────────────────────────────────────────────────────────────
 connect();
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<!-- INSTALLER POPUP -->
-<div class="popup-overlay" id="popup">
-  <div class="popup">
-    <h2>Setup required</h2>
-    <p class="popup-sub">Some components need to be installed. For drivers, an installer window will open — click through it, then return here.</p>
-    <div class="dep-list" id="dep-list"></div>
-    <div class="prog-area" id="prog-area">
-      <div class="prog-label" id="prog-label">Installing...</div>
-      <div class="prog-bar"><div class="prog-fill" id="prog-fill"></div></div>
-      <div class="prog-status" id="prog-status"></div>
-    </div>
-    <div class="popup-btns">
-      <button class="btn-skip"    id="btn-skip"    onclick="closePopup()">Skip for now</button>
-      <button class="btn-install" id="btn-install" onclick="startInstall()">Install all</button>
-      <button class="btn-done"    id="btn-done"    onclick="closePopup()">Done — restart app</button>
-    </div>
-  </div>
-</div>
 </body>
 </html>
