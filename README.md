@@ -25,7 +25,4 @@
 
 ## 🚀 Getting Started
 
-### 1. Installation
-The script is designed to handle its own setup. Simply run:
-```bash
-python buzzconnect.py
+### 1. Double Click: buzzconnect.pyw (it should automatically install everything required)
