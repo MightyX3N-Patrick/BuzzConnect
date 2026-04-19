@@ -24,7 +24,6 @@ else:
     EXE_DIR  = BASE_DIR
 
 MAPPING_FILE = os.path.join(EXE_DIR, "mapping.json")
-BAT_FILE     = os.path.join(EXE_DIR, "install.bat")
 
 # ── Check and install missing dependencies ─────────────────────────────────────
 def check_vigem():
@@ -40,7 +39,8 @@ def check_vigem():
 def get_missing():
     missing = []
     for pkg, imp in [("pybuzzers","pybuzzers"), ("vgamepad","vgamepad"),
-                     ("pywebview","webview"), ("websockets","websockets")]:
+                     ("websockets","websockets"), ("pystray","pystray"),
+                     ("Pillow","PIL")]:
         try:
             __import__(imp)
         except ImportError:
@@ -49,16 +49,63 @@ def get_missing():
         missing.append("vigem")
     return missing
 
+def install_pip(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package,
+                           "--quiet", "--disable-pip-version-check"])
+
+def install_vigem():
+    import urllib.request, tempfile
+    api = "https://api.github.com/repos/nefarius/ViGEmBus/releases/latest"
+    with urllib.request.urlopen(api, timeout=15) as r:
+        data = json.loads(r.read())
+    url = next(a["browser_download_url"] for a in data["assets"] if a["name"].endswith(".exe"))
+    tmp = os.path.join(tempfile.gettempdir(), "ViGEmBus_Setup.exe")
+    urllib.request.urlretrieve(url, tmp)
+    subprocess.call([tmp], shell=False)
+    try:
+        os.remove(tmp)
+    except Exception:
+        pass
+
+def uninstall_vigem():
+    """Uninstall ViGEmBus via Windows registry uninstall string."""
+    import winreg
+    paths = [
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+    ]
+    for hive, path in paths:
+        try:
+            with winreg.OpenKey(hive, path) as key:
+                for i in range(winreg.QueryInfoKey(key)[0]):
+                    try:
+                        with winreg.OpenKey(key, winreg.EnumKey(key, i)) as sub:
+                            try:
+                                name, _ = winreg.QueryValueEx(sub, "DisplayName")
+                                if "vigem" in name.lower():
+                                    uninstall_str, _ = winreg.QueryValueEx(sub, "UninstallString")
+                                    subprocess.call(uninstall_str, shell=True)
+                                    return
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+    raise Exception("ViGEmBus uninstaller not found in registry")
+
 def run_installer(missing):
-    """Call install.bat with missing packages as arguments, wait for it to finish."""
-    if not os.path.exists(BAT_FILE):
-        return
-    args = " ".join(missing)
-    # Run install.bat in a visible window so user can see progress
-    subprocess.call(
-        f'cmd /c start /wait "" "{BAT_FILE}" {args}',
-        shell=True
-    )
+    """Installs missing dependencies directly via pip/python."""
+    for pkg in missing:
+        try:
+            if pkg == "vigem":
+                print(f"Installing ViGEmBus driver...")
+                install_vigem()
+            else:
+                print(f"Installing {pkg}...")
+                install_pip(pkg)
+        except Exception as e:
+            print(f"Failed to install {pkg}: {e}")
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 HTTP_PORT = 7843
@@ -196,7 +243,7 @@ class AppState:
             "logs":    list(self.logs),
             "vg_ok":   self.vg_ok,
             "active_buzzers": sum(len(d.active_slots) for d in self.devices.values()),
-            "missing": [p for p,i in [("pybuzzers","pybuzzers"),("vgamepad","vgamepad"),("pywebview","webview"),("websockets","websockets")] if not __import__("importlib").util.find_spec(i)],
+            "missing": [p for p,i in [("pybuzzers","pybuzzers"),("vgamepad","vgamepad"),("websockets","websockets"),("pystray","pystray"),("Pillow","PIL")] if not __import__("importlib").util.find_spec(i)],
             "vigem_ok": check_vigem(),
             "local_ip": get_local_ip(),
         }
@@ -524,6 +571,23 @@ class HttpHandler(SimpleHTTPRequestHandler):
             threading.Thread(target=do_install, daemon=True).start()
             self.send_json(200, {"ok": True})
 
+        elif self.path == "/api/uninstall":
+            pkg = body.get("package")
+            def do_uninstall():
+                try:
+                    self.state.log(f"Removing {pkg}...")
+                    if pkg == "vigem":
+                        uninstall_vigem()
+                    else:
+                        subprocess.check_call([sys.executable, "-m", "pip", "uninstall",
+                                               pkg, "-y", "--quiet"])
+                    self.state.log(f"Removed {pkg} successfully")
+                except Exception as e:
+                    self.state.log(f"Remove failed for {pkg}: {e}")
+                self.state.broadcast(self.state.full_state())
+            threading.Thread(target=do_uninstall, daemon=True).start()
+            self.send_json(200, {"ok": True})
+
         else:
             self.send_json(404, {"error": "not found"})
 
@@ -554,10 +618,10 @@ def start_ws(state):
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main():
-    # Check for missing dependencies and run installer if needed
+    # Check for missing dependencies and install them directly
     missing = get_missing()
     if missing:
-        print(f"Missing: {missing} — running installer...")
+        print(f"Missing: {missing} — downloading dependencies...")
         run_installer(missing)
         # Re-check after install
         missing = get_missing()
@@ -592,19 +656,52 @@ def main():
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     state.log(f"Ready — http://127.0.0.1:{HTTP_PORT}")
 
+    # Install pystray and Pillow if missing before trying to use them
+    for pkg in ["pystray", "Pillow"]:
+        try:
+            __import__(pkg.lower())
+        except ImportError:
+            try:
+                install_pip(pkg)
+            except Exception as e:
+                state.log(f"Could not install {pkg}: {e}")
+
+    import webbrowser
+    webbrowser.open(f"http://127.0.0.1:{HTTP_PORT}")
+
+    # ── Tray icon ──────────────────────────────────────────────────────────────
     try:
-        import webview
-        window = webview.create_window(
-            "BuzzConnect",
-            f"http://127.0.0.1:{HTTP_PORT}",
-            width=960,
-            height=680,
-            resizable=True,
-            min_size=(800, 560),
+        import pystray
+        from PIL import Image
+
+        ico_path = os.path.join(EXE_DIR, "buzzconnect.ico")
+        if os.path.exists(ico_path):
+            tray_image = Image.open(ico_path)
+        else:
+            from PIL import ImageDraw
+            tray_image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+            d = ImageDraw.Draw(tray_image)
+            d.ellipse([4, 4, 60, 60], fill="#e74c3c")
+            d.ellipse([18, 18, 46, 46], fill="#922b21")
+
+        def on_open(icon, item):
+            webbrowser.open(f"http://127.0.0.1:{HTTP_PORT}")
+
+        def on_quit(icon, item):
+            state.set_all_lights(False)
+            httpd.shutdown()
+            icon.stop()
+
+        menu = pystray.Menu(
+            pystray.MenuItem("Open BuzzConnect", on_open, default=True),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Quit", on_quit),
         )
-        webview.start()
-    except ImportError:
-        state.log("pywebview not available — open browser at http://127.0.0.1:7843")
+        icon = pystray.Icon("BuzzConnect", tray_image, "BuzzConnect", menu)
+        icon.run()
+
+    except Exception as e:
+        state.log(f"Tray icon failed: {e} — running headless")
         try:
             while True:
                 time.sleep(1)
