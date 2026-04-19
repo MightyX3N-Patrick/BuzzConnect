@@ -120,6 +120,31 @@ a { color: inherit; text-decoration: none; }
 .log-err  { color: #f87171; }
 
 
+/* ── Installer popup ── */
+.popup-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 200; align-items: center; justify-content: center; }
+.popup-overlay.show { display: flex; }
+.popup { background: var(--surface); border: 1px solid var(--border2); border-radius: 14px; width: 460px; padding: 28px; }
+.popup h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+.popup-sub { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
+.dep-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+.dep-row { background: var(--surface2); border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; }
+.dep-icon { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
+.dep-icon.ok   { background: #0d2a1a; color: var(--green); border: 1px solid #1e5c32; }
+.dep-icon.miss { background: #2a0d0d; color: #f87171; border: 1px solid #5a1515; }
+.dep-name { font-size: 13px; font-weight: 500; flex: 1; }
+.dep-sub  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.dep-status { font-size: 11px; font-weight: 500; }
+.st-ok   { color: var(--green); }
+.st-miss { color: #f87171; }
+.prog-area { margin-bottom: 16px; display: none; }
+.prog-label  { font-size: 11px; color: var(--muted2); margin-bottom: 6px; }
+.prog-bar    { background: var(--surface2); border-radius: 100px; height: 5px; overflow: hidden; }
+.prog-fill   { background: var(--red); height: 100%; width: 0%; transition: width .4s; border-radius: 100px; }
+.prog-status { font-size: 10px; color: var(--muted); margin-top: 5px; }
+.popup-btns  { display: flex; gap: 8px; justify-content: flex-end; }
+.btn-skip    { padding: 9px 16px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--border2); color: var(--muted); font-size: 12px; cursor: pointer; }
+.btn-install { padding: 9px 24px; border-radius: 8px; background: var(--red); border: none; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-done    { padding: 9px 24px; border-radius: 8px; background: #1e6b3a; border: none; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; display: none; }
 </style>
 </head>
 <body>
@@ -291,7 +316,7 @@ function connect() {
   ws.onclose = () => { setStatus('', 'Reconnecting...'); setTimeout(connect, 2000); };
   ws.onmessage = e => {
     const msg = JSON.parse(e.data);
-    if (msg.type === 'state')  { state = msg; if (state.local_ip) localIp = state.local_ip; render(); }
+    if (msg.type === 'state')  { state = msg; if (state.local_ip) localIp = state.local_ip; render(); checkMissing(); }
     if (msg.type === 'button') onButton(msg);
     if (msg.type === 'log')    appendLog(msg.msg);
   };
@@ -320,15 +345,16 @@ function render() {
 function renderControllers() {
   const grid = document.getElementById('bz-grid');
   if (!state.devices.length) {
-    grid.innerHTML = `<div class="bz-card unpaired" style="grid-column:1/-1;border-radius:12px;padding:40px;text-align:center;color:var(--muted)">No Buzz dongle detected — plug in your USB dongle</div>`;
+    grid.innerHTML = `<div class="bz-card unpaired" style="grid-column:1/-1;border-radius:12px;padding:40px;text-align:center;color:var(--muted)">No Buzz device detected — plug in your USB device</div>`;
     return;
   }
   let html = '';
   state.devices.forEach((dev, di) => {
     for (let slot = 0; slot < SLOTS; slot++) {
-      const mapping = state.mapping[slot] || DEFAULT_MAPPING;
+      const mapKey = `${dev.path}:${slot}`;
+      const mapping = state.mapping[mapKey] || state.mapping[String(slot)] || DEFAULT_MAPPING;
       html += `<div class="bz-card" id="bzc-${di}-${slot}">
-        <div class="bz-label">Buzzer ${slot+1}</div>
+        <div class="bz-label">Buzzer ${di+1}:${slot+1}</div>
         <div class="buzz-circle" id="bzr-${di}-${slot}">Buzz!</div>
         <div class="color-btns">
           ${['Blue','Orange','Green','Yellow'].map(b => `
@@ -346,22 +372,25 @@ function renderMapping() {
   if (!state) return;
   const grid = document.getElementById('map-grid');
   let html = '';
-  for (let slot = 0; slot < SLOTS; slot++) {
-    const mapping = state.mapping[slot] || DEFAULT_MAPPING;
-    html += `<div class="map-card">
-      <div class="map-header">Buzzer ${slot+1}</div>
-      <div class="map-body">
-        ${BTNS.map(btn => `
-          <div class="map-row">
-            <button class="map-pill" style="background:${BTN_COLORS[btn]}">${btn}</button>
-            <span class="map-arrow">→</span>
-            <select class="map-select" id="ms-${slot}-${btn}" onchange="mapChanged()">
-              ${state.buttons.map(b => `<option${b===(mapping[btn]||DEFAULT_MAPPING[btn])?' selected':''}>${b}</option>`).join('')}
-            </select>
-          </div>`).join('')}
-      </div>
-    </div>`;
-  }
+  state.devices.forEach((dev, di) => {
+    for (let slot = 0; slot < SLOTS; slot++) {
+      const mapKey = `${dev.path}:${slot}`;
+      const mapping = state.mapping[mapKey] || state.mapping[String(slot)] || DEFAULT_MAPPING;
+      html += `<div class="map-card">
+        <div class="map-header">Buzzer ${di+1}:${slot+1}</div>
+        <div class="map-body">
+          ${BTNS.map(btn => `
+            <div class="map-row">
+              <button class="map-pill" style="background:${BTN_COLORS[btn]}">${btn}</button>
+              <span class="map-arrow">→</span>
+              <select class="map-select" id="ms-${di}-${slot}-${btn}" onchange="mapChanged()">
+                ${state.buttons.map(b => `<option${b===(mapping[btn]||DEFAULT_MAPPING[btn])?' selected':''}>${b}</option>`).join('')}
+              </select>
+            </div>`).join('')}
+        </div>
+      </div>`;
+    }
+  });
   grid.innerHTML = html;
 }
 
@@ -450,14 +479,18 @@ function onButton(msg) {
 function mapChanged() {}
 
 function saveMapping() {
+  if (!state) return;
   const mapping = {};
-  for (let slot = 0; slot < SLOTS; slot++) {
-    mapping[slot] = {};
-    BTNS.forEach(btn => {
-      const el = document.getElementById(`ms-${slot}-${btn}`);
-      if (el) mapping[slot][btn] = el.value;
-    });
-  }
+  state.devices.forEach((dev, di) => {
+    for (let slot = 0; slot < SLOTS; slot++) {
+      const mapKey = `${dev.path}:${slot}`;
+      mapping[mapKey] = {};
+      BTNS.forEach(btn => {
+        const el = document.getElementById(`ms-${di}-${slot}-${btn}`);
+        if (el) mapping[mapKey][btn] = el.value;
+      });
+    }
+  });
   fetch(API + '/api/mapping', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
@@ -466,10 +499,13 @@ function saveMapping() {
 }
 
 function resetMapping() {
+  if (!state) return;
   const mapping = {};
-  for (let slot = 0; slot < SLOTS; slot++) {
-    mapping[slot] = {...DEFAULT_MAPPING};
-  }
+  state.devices.forEach((dev, di) => {
+    for (let slot = 0; slot < SLOTS; slot++) {
+      mapping[`${dev.path}:${slot}`] = {...DEFAULT_MAPPING};
+    }
+  });
   fetch(API + '/api/mapping', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
@@ -628,5 +664,23 @@ function installNext() {
 connect();
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- INSTALLER POPUP -->
+<div class="popup-overlay" id="popup">
+  <div class="popup">
+    <h2>Setup required</h2>
+    <p class="popup-sub">Some components need to be installed. For drivers, an installer window will open — click through it, then return here.</p>
+    <div class="dep-list" id="dep-list"></div>
+    <div class="prog-area" id="prog-area">
+      <div class="prog-label" id="prog-label">Installing...</div>
+      <div class="prog-bar"><div class="prog-fill" id="prog-fill"></div></div>
+      <div class="prog-status" id="prog-status"></div>
+    </div>
+    <div class="popup-btns">
+      <button class="btn-skip"    id="btn-skip"    onclick="closePopup()">Skip for now</button>
+      <button class="btn-install" id="btn-install" onclick="startInstall()">Install all</button>
+      <button class="btn-done"    id="btn-done"    onclick="closePopup()">Done — restart app</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
