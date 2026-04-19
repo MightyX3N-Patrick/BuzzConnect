@@ -515,23 +515,33 @@ class HttpHandler(SimpleHTTPRequestHandler):
             x       = float(body.get("x", 0))
             y       = float(body.get("y", 0))
 
+ # Calculate which physical device and which local buzzer to use
+            d_idx = s // 4
+            l_slot = s % 4
+
             def get_or_create_gp():
                 with self.state._lock:
-                    devs = list(self.state.devices.values())
-                if not devs:
+                    # Use the connection order to find the right physical device
+                    if d_idx >= len(self.state._device_order):
+                        return None
+                    
+                    path = self.state._device_order[d_idx]
+                    dev = self.state.devices.get(path)
+                
+                if not dev:
                     return None
-                dev = devs[0]
-                gp = dev.gamepads.get(s)
+
+                gp = dev.gamepads.get(l_slot)
                 if not gp and self.state.vg_ok:
                     try:
                         import vgamepad as vg
                         gp = vg.VX360Gamepad()
                         with self.state._lock:
-                            dev.gamepads[s] = gp
-                            dev.active_slots.add(s)
+                            dev.gamepads[l_slot] = gp
+                            dev.active_slots.add(l_slot)
                     except Exception:
                         pass
-                return dev.gamepads.get(s)
+                return dev.gamepads.get(l_slot)
 
             if btn == "stick":
                 gp = get_or_create_gp()
@@ -547,7 +557,10 @@ class HttpHandler(SimpleHTTPRequestHandler):
                     try:
                         xbox_btn = self.state.XBOX_MAP.get(btn)
                         if xbox_btn:
-                            gp.press_button(button=xbox_btn) if pressed else gp.release_button(button=xbox_btn)
+                            if pressed:
+                                gp.press_button(button=xbox_btn)
+                            else:
+                                gp.release_button(button=xbox_btn)
                             gp.update()
                     except Exception:
                         pass
