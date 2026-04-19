@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>BuzzConnect Pad</title>
+<link rel="icon" type="image/x-icon" href="buzzconnect.ico">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; background: #111; color: #fff; font-family: 'Segoe UI', sans-serif; touch-action: none; user-select: none; overflow: hidden; }
+
+.topbar { background: #0e0e0e; border-bottom: 1px solid #222; padding: 10px 16px; display: flex; align-items: center; gap: 10px; height: 48px; }
+.logo { width: 18px; height: 18px; border-radius: 50%; background: #e74c3c; display: flex; align-items: center; justify-content: center; }
+.logo-inner { width: 7px; height: 7px; border-radius: 50%; background: #922b21; }
+.topbar h1 { font-size: 13px; font-weight: 700; }
+.topbar h1 span { color: #e74c3c; }
+.slot-wrap { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; color: #666; }
+.slot-btn { width: 28px; height: 28px; border-radius: 6px; background: #2a2a2a; border: 1px solid #333; color: #666; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.slot-btn.on { background: #e74c3c; border-color: #e74c3c; color: #fff; }
+
+.mode-bar { display: flex; background: #0e0e0e; border-bottom: 1px solid #222; }
+.mode-btn { flex: 1; padding: 9px; font-size: 12px; font-weight: 500; text-align: center; color: #555; cursor: pointer; border-bottom: 2px solid transparent; }
+.mode-btn.on { color: #fff; border-bottom-color: #e74c3c; }
+
+.pad-area { display: flex; align-items: center; justify-content: center; height: calc(100% - 48px - 38px); }
+.view { display: none; flex-direction: column; align-items: center; gap: 20px; }
+.view.on { display: flex; }
+
+/* DPad */
+.dpad { display: grid; grid-template-columns: repeat(3, 90px); grid-template-rows: repeat(3, 90px); gap: 5px; }
+.dp { border-radius: 12px; background: #2a2a2a; border: 1px solid #333; display: flex; align-items: center; justify-content: center; font-size: 26px; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background .08s, border-color .08s; }
+.dp.pressed { background: #e74c3c; border-color: #c0392b; }
+.dp-mid { background: #1a1a1a; border-color: #222; cursor: default; border-radius: 50%; }
+.dp-empty { background: transparent; border: none; }
+
+/* Stick */
+.stick-outer { width: 220px; height: 220px; border-radius: 50%; background: #1e1e1e; border: 2px solid #333; position: relative; touch-action: none; }
+.stick-knob { width: 80px; height: 80px; border-radius: 50%; background: #e74c3c; border: 3px solid #922b21; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+.stick-dot { width: 8px; height: 8px; border-radius: 50%; background: #333; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+.stick-vals { font-size: 11px; color: #444; font-family: monospace; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo"><div class="logo-inner"></div></div>
+  <h1>Buzz<span>Connect</span> Pad</h1>
+  <div class="slot-wrap" id="slot-wrap">
+    Slot:
+    <div class="slot-btn on" onclick="setSlot(0,this)">1</div>
+    <div class="slot-btn" onclick="setSlot(1,this)">2</div>
+    <div class="slot-btn" onclick="setSlot(2,this)">3</div>
+    <div class="slot-btn" onclick="setSlot(3,this)">4</div>
+  </div>
+</div>
+
+<div class="mode-bar">
+  <div class="mode-btn on" onclick="setMode('dpad',this)">DPad</div>
+  <div class="mode-btn" onclick="setMode('stick',this)">Stick</div>
+</div>
+
+<div class="pad-area">
+
+  <div id="view-dpad" class="view on">
+    <div class="dpad">
+      <div class="dp dp-empty"></div>
+      <div class="dp" id="dp-up"   data-btn="DPad Up">▲</div>
+      <div class="dp dp-empty"></div>
+      <div class="dp" id="dp-left" data-btn="DPad Left">◀</div>
+      <div class="dp dp-mid"></div>
+      <div class="dp" id="dp-right" data-btn="DPad Right">▶</div>
+      <div class="dp dp-empty"></div>
+      <div class="dp" id="dp-down" data-btn="DPad Down">▼</div>
+      <div class="dp dp-empty"></div>
+    </div>
+  </div>
+
+  <div id="view-stick" class="view">
+    <div class="stick-outer" id="stick-zone">
+      <div class="stick-knob" id="stick-knob"></div>
+      <div class="stick-dot"></div>
+    </div>
+    <div class="stick-vals" id="stick-vals">x: 0.00 &nbsp; y: 0.00</div>
+  </div>
+
+</div>
+
+<script>
+const API = `http://${location.hostname}:7843`;
+let slot = 0;
+let mode = 'dpad';
+
+// Fetch how many buzzers are connected and update slot buttons
+fetch(API + '/api/status').then(r => r.json()).then(s => {
+  const total = (s.devices || []).reduce((n, _) => n + 4, 0);
+  if (total <= 4) return;
+  const wrap = document.getElementById('slot-wrap');
+  wrap.innerHTML = 'Slot:';
+  for (let i = 0; i < total; i++) {
+    const btn = document.createElement('div');
+    btn.className = 'slot-btn' + (i === 0 ? ' on' : '');
+    btn.textContent = i + 1;
+    btn.onclick = () => setSlot(i, btn);
+    wrap.appendChild(btn);
+  }
+}).catch(() => {});
+
+function setSlot(s, el) {
+  slot = s;
+  document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('on'));
+  el.classList.add('on');
+}
+
+function setMode(m, el) {
+  mode = m;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('on'));
+  el.classList.add('on');
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('on'));
+  document.getElementById('view-' + m).classList.add('on');
+}
+
+function send(btn, pressed) {
+  fetch(API + '/api/pad', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({slot, btn, pressed}),
+  }).catch(() => {});
+}
+
+// ── DPad ──────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.dp[data-btn]').forEach(el => {
+  const btn = el.dataset.btn;
+
+  el.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    el.classList.add('pressed');
+    send(btn, true);
+  });
+
+  const up = e => {
+    e.preventDefault();
+    el.classList.remove('pressed');
+    send(btn, false);
+  };
+
+  el.addEventListener('pointerup',     up);
+  el.addEventListener('pointercancel', up);
+  el.addEventListener('pointerleave',  up);
+});
+
+// ── Stick ─────────────────────────────────────────────────────────────────────
+const zone  = document.getElementById('stick-zone');
+const knob  = document.getElementById('stick-knob');
+const vals  = document.getElementById('stick-vals');
+const RADIUS = 70;
+let stickActive = false;
+let sendTimer = null;
+
+function getStickPos(e) {
+  const rect = zone.getBoundingClientRect();
+  const cx   = rect.left + rect.width  / 2;
+  const cy   = rect.top  + rect.height / 2;
+  let dx = e.clientX - cx;
+  let dy = e.clientY - cy;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  if (dist > RADIUS) {
+    dx = dx / dist * RADIUS;
+    dy = dy / dist * RADIUS;
+  }
+  return { dx, dy, x: dx / RADIUS, y: dy / RADIUS };
+}
+
+function moveKnob(dx, dy) {
+  knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+}
+
+function resetKnob() {
+  if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
+  knob.style.transform = 'translate(-50%, -50%)';
+  vals.textContent = 'x: 0.00   y: 0.00';
+  // Send reset directly without throttle
+  fetch(API + '/api/pad', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({slot, btn: 'stick', pressed: true, x: 0, y: 0}),
+  }).catch(() => {});
+}
+
+function sendStick(x, y) {
+  fetch(API + '/api/pad', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({slot, btn: 'stick', pressed: true, x: parseFloat(x.toFixed(3)), y: parseFloat(y.toFixed(3))}),
+  }).catch(() => {});
+}
+
+zone.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  stickActive = true;
+  zone.setPointerCapture(e.pointerId);
+  const {dx, dy, x, y} = getStickPos(e);
+  moveKnob(dx, dy);
+  vals.textContent = `x: ${x.toFixed(2)}   y: ${y.toFixed(2)}`;
+  sendStick(x, y);
+});
+
+zone.addEventListener('pointermove', e => {
+  if (!stickActive) return;
+  e.preventDefault();
+  const {dx, dy, x, y} = getStickPos(e);
+  moveKnob(dx, dy);
+  vals.textContent = `x: ${x.toFixed(2)}   y: ${y.toFixed(2)}`;
+  if (!sendTimer) {
+    sendTimer = setTimeout(() => { sendStick(x, y); sendTimer = null; }, 16);
+  }
+});
+
+zone.addEventListener('pointerup',     e => { stickActive = false; resetKnob(); });
+zone.addEventListener('pointercancel', e => { stickActive = false; resetKnob(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BuzzConnect</title>
+<link rel="icon" type="image/x-icon" href="buzzconnect.ico">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #141414;
+  --surface:  #1e1e1e;
+  --surface2: #2a2a2a;
+  --border:   #2a2a2a;
+  --border2:  #333;
+  --text:     #ffffff;
+  --muted:    #555;
+  --muted2:   #888;
+  --red:      #e74c3c;
+  --red-dark: #922b21;
+  --red-dim:  #7b1f1f;
+  --green:    #4ade80;
+  --yellow:   #fbbf24;
+  --blue:     #38bdf8;
+  --font: 'Segoe UI', system-ui, sans-serif;
+}
+
+body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 13px; min-height: 100vh; overflow-x: hidden; }
+a { color: inherit; text-decoration: none; }
+
+/* ── Topbar ── */
+.topbar { background: #0e0e0e; border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 50; }
+.logo { width: 22px; height: 22px; border-radius: 50%; background: var(--red); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.logo-inner { width: 9px; height: 9px; border-radius: 50%; background: var(--red-dark); }
+.topbar h1 { font-size: 15px; font-weight: 700; letter-spacing: .02em; }
+.topbar h1 span { color: var(--red); }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.status-pill { display: flex; align-items: center; gap: 5px; font-size: 11px; }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); transition: background .3s; }
+.status-dot.ok { background: var(--green); }
+.status-dot.warn { background: var(--yellow); }
+.api-tag { font-size: 10px; color: var(--muted); font-family: monospace; }
+
+/* ── Tabs ── */
+.tabs { background: #0e0e0e; border-bottom: 1px solid var(--border); display: flex; padding: 0 20px; gap: 2px; }
+.tab { padding: 9px 16px; font-size: 12px; border-bottom: 2px solid transparent; color: var(--muted); cursor: pointer; user-select: none; transition: color .15s; white-space: nowrap; }
+.tab:hover { color: var(--muted2); }
+.tab.active { border-bottom-color: var(--red); color: var(--text); font-weight: 500; }
+
+/* ── Content ── */
+.content { padding: 20px; }
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* ── Controllers tab ── */
+.bz-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.bz-card { background: var(--surface); border-radius: 28px; padding: 22px 14px 16px; display: flex; flex-direction: column; align-items: center; gap: 10px; border: 2px solid var(--border2); transition: border-color .2s; }
+.bz-card.has-input { border-color: #3a2020; }
+.bz-card.unpaired { opacity: 0.25; pointer-events: none; }
+.bz-label { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+.buzz-circle { width: 100px; height: 100px; border-radius: 50%; background: var(--red-dim); border: 4px solid #5a1515; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #aaa; transition: background .1s, border-color .1s; }
+.buzz-circle.pressed { background: var(--red); border-color: var(--red-dark); color: #fff; }
+.color-btns { width: 100%; display: flex; flex-direction: column; gap: 5px; }
+.cbtn { width: 100%; padding: 7px; border-radius: 7px; font-size: 11px; font-weight: 600; text-align: center; border: none; color: #fff; opacity: 0.6; transition: opacity .1s, filter .1s; }
+.cbtn.pressed { opacity: 1; filter: brightness(1.3); }
+.cbtn-blue   { background: #1a5276; }
+.cbtn-orange { background: #935116; }
+.cbtn-green  { background: #1e6b3a; }
+.cbtn-yellow { background: #7d6608; }
+.xbox-out { font-size: 10px; color: var(--muted); text-align: center; height: 14px; }
+.xbox-out.active { color: var(--muted2); }
+.master-badge { font-size: 9px; color: var(--yellow); background: #2a2000; border: 1px solid #5a4000; border-radius: 100px; padding: 2px 8px; margin-top: 2px; }
+
+/* ── Mapping tab ── */
+.map-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.map-card { background: var(--surface); border-radius: 10px; overflow: hidden; border: 1px solid var(--border2); }
+.map-header { background: var(--red-dim); padding: 8px 14px; font-size: 12px; font-weight: 600; }
+.map-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 7px; }
+.map-row { display: flex; align-items: center; gap: 7px; }
+.map-pill { width: 54px; padding: 3px 0; border-radius: 5px; font-size: 9px; font-weight: 700; text-align: center; flex-shrink: 0; border: none; color: #fff; cursor: default; }
+.map-arrow { color: var(--muted); font-size: 11px; }
+.map-select { flex: 1; font-size: 10px; padding: 3px 5px; border-radius: 5px; border: 1px solid var(--border2); background: #111; color: var(--text); outline: none; cursor: pointer; }
+.save-row { display: flex; gap: 8px; margin-top: 16px; }
+.btn-save  { padding: 8px 20px; border-radius: 8px; font-size: 12px; background: var(--red); color: #fff; border: none; cursor: pointer; font-weight: 600; }
+.btn-reset { padding: 8px 14px; border-radius: 8px; font-size: 12px; background: var(--surface); border: 1px solid var(--border2); color: var(--muted2); cursor: pointer; }
+
+/* ── Lights tab ── */
+.lt-card { background: var(--surface); border-radius: 10px; border: 1px solid var(--border2); overflow: hidden; }
+.lt-row { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-top: 1px solid #1a1a1a; }
+.lt-row:first-child { border-top: none; }
+.lt-ind { width: 13px; height: 13px; border-radius: 50%; background: var(--border2); flex-shrink: 0; transition: background .2s; }
+.lt-ind.on { background: var(--red); }
+.lt-label { flex: 1; font-size: 12px; color: var(--muted2); }
+.lt-label.all { color: var(--text); font-weight: 600; }
+.lt-label.unpaired { color: var(--muted); }
+.btn-test     { padding: 5px 14px; border-radius: 7px; font-size: 11px; background: var(--surface2); border: 1px solid var(--border2); color: var(--muted2); cursor: pointer; }
+.btn-test-all { background: var(--red); border-color: var(--red); color: #fff; font-weight: 600; }
+.btn-test:disabled { opacity: 0.2; cursor: default; }
+
+/* ── API tab ── */
+.api-section { background: var(--surface); border: 1px solid var(--border2); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+.api-section h3 { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 12px; }
+.endpoint { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-top: 1px solid #1a1a1a; }
+.endpoint:first-of-type { border-top: none; padding-top: 0; }
+.method { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+.get  { background: #0d2a1a; color: var(--green); }
+.post { background: #0d1a2a; color: var(--blue); }
+.ep-path { font-family: monospace; font-size: 11px; color: #ddd; }
+.ep-desc { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.ep-code { font-family: monospace; font-size: 10px; color: #444; margin-top: 4px; background: #111; padding: 5px 8px; border-radius: 4px; line-height: 1.7; }
+
+/* ── Log tab ── */
+.log-entry { display: block; padding: 2px 0; border-bottom: 1px solid #141414; }
+.log-box { background: #0a0a0a; border: 1px solid var(--border2); border-radius: 8px; padding: 14px; font-family: monospace; font-size: 11px; line-height: 2; height: 400px; overflow-y: auto; }
+.log-t    { color: #333; }
+.log-ok   { color: var(--green); }
+.log-btn  { color: var(--yellow); }
+.log-api  { color: var(--blue); }
+.log-err  { color: #f87171; }
+
+
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo"><div class="logo-inner"></div></div>
+  <h1>Buzz<span>Connect</span></h1>
+  <div class="topbar-right">
+    <div class="status-pill">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">Connecting...</span>
+    </div>
+    <span class="api-tag">localhost:7843</span>
+
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="controllers">Controllers</div>
+  <div class="tab" data-tab="mapping">Mapping</div>
+  <div class="tab" data-tab="lights">Lights</div>
+  <div class="tab" data-tab="api">API</div>
+  <div class="tab" data-tab="log">Log</div>
+  <div class="tab" data-tab="pad">Phone Pad</div>
+</div>
+
+<div class="content">
+
+  <!-- CONTROLLERS -->
+  <div id="tab-controllers" class="panel active">
+    <div class="bz-grid" id="bz-grid">
+      <div class="bz-card unpaired"><div class="bz-label">No device</div><div class="buzz-circle">Buzz!</div><div class="color-btns"><div class="cbtn cbtn-blue">Blue</div><div class="cbtn cbtn-orange">Orange</div><div class="cbtn cbtn-green">Green</div><div class="cbtn cbtn-yellow">Yellow</div></div><div class="xbox-out">—</div></div>
+    </div>
+  </div>
+
+  <!-- MAPPING -->
+  <div id="tab-mapping" class="panel">
+    <div class="map-grid" id="map-grid"></div>
+    <div class="save-row">
+      <button class="btn-save"  onclick="saveMapping()">Save mapping</button>
+      <button class="btn-reset" onclick="resetMapping()">Reset defaults</button>
+    </div>
+  </div>
+
+  <!-- LIGHTS -->
+  <div id="tab-lights" class="panel">
+    <div class="lt-card" id="lt-card">
+      <div class="lt-row">
+        <div class="lt-ind" id="lind-all"></div>
+        <span class="lt-label all">All buzzers</span>
+        <button class="btn-test btn-test-all" onclick="testAll()">Test all (3s)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- API -->
+  <div id="tab-api" class="panel">
+    <div class="api-section">
+      <h3>Button events</h3>
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <div>
+          <div class="ep-path">/api/events?since={timestamp_ms}</div>
+          <div class="ep-desc">Get button events since a timestamp (milliseconds)</div>
+          <div class="ep-code">{"events":[{"buzzer":1,"button":"Red","state":"down","time":1712345678000}]}</div>
+        </div>
+      </div>
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <div>
+          <div class="ep-path">/api/state</div>
+          <div class="ep-desc">Current pressed state of all buzzer buttons</div>
+          <div class="ep-code">{"buzzers":{"1":{"Red":false,"Blue":false,"Orange":true,"Green":false,"Yellow":false}}}</div>
+        </div>
+      </div>
+    </div>
+    <div class="api-section">
+      <h3>Light control</h3>
+      <div class="endpoint">
+        <span class="method post">POST</span>
+        <div>
+          <div class="ep-path">/api/light</div>
+          <div class="ep-desc">Set a single buzzer light on or off</div>
+          <div class="ep-code">{"buzzer": 1, "state": true}</div>
+        </div>
+      </div>
+      <div class="endpoint">
+        <span class="method post">POST</span>
+        <div>
+          <div class="ep-path">/api/light/all</div>
+          <div class="ep-desc">Set all buzzer lights at once</div>
+          <div class="ep-code">{"state": false}</div>
+        </div>
+      </div>
+    </div>
+    <div class="api-section">
+      <h3>WebSocket — ws://localhost:7844</h3>
+      <div class="endpoint">
+        <span class="method get">WS</span>
+        <div>
+          <div class="ep-path">Button event push</div>
+          <div class="ep-desc">Receive button events in real time without polling</div>
+          <div class="ep-code">{"type":"button","slot":0,"btn":"Red","pressed":true}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAD QR -->
+  <div id="tab-pad" class="panel">
+    <div style="max-width:400px;margin:0 auto;text-align:center;padding-top:20px">
+      <p style="font-size:13px;color:#888;margin-bottom:20px">Scan this QR code on your phone to open the virtual pad, or share the link.</p>
+      <div id="qr-container" style="background:#fff;border-radius:12px;padding:20px;display:inline-block;margin-bottom:16px"></div>
+      <div style="margin-top:12px">
+        <div id="pad-url" style="font-family:monospace;font-size:12px;color:#555;word-break:break-all;margin-bottom:12px"></div>
+        <button onclick="copyPadUrl()" style="padding:8px 20px;border-radius:8px;background:#e74c3c;border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer">Copy link</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div id="tab-log" class="panel">
+    <div class="log-box" id="log-box"></div>
+  </div>
+
+</div>
+
+
+
+<script>
+const API     = 'http://127.0.0.1:7843';
+const WS_URL  = 'ws://127.0.0.1:7844';
+const SLOTS   = 4;
+const BTNS    = ['Red','Blue','Orange','Green','Yellow'];
+const DEFAULT_MAPPING = {Red:'RT',Blue:'A',Orange:'B',Green:'X',Yellow:'Y'};
+const BTN_COLORS = {
+  Red:    '#7b1f1f',
+  Blue:   '#1a5276',
+  Orange: '#935116',
+  Green:  '#1e6b3a',
+  Yellow: '#7d6608',
+};
+const BTN_CLASSES = {
+  Blue:'cbtn-blue', Orange:'cbtn-orange', Green:'cbtn-green', Yellow:'cbtn-yellow'
+};
+
+let state       = null;
+let ws          = null;
+let localIp     = location.hostname;
+let lightTimers = {};
+let mapVars     = {};
+let installQueue = [];
+let installIdx   = 0;
+
+// ── Tabs ───────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('tab-' + t.dataset.tab).classList.add('active');
+  });
+});
+
+// ── WebSocket ──────────────────────────────────────────────────────────────────
+function connect() {
+  ws = new WebSocket(WS_URL);
+  ws.onopen  = () => { setStatus('ok', 'Connected'); };
+  ws.onclose = () => { setStatus('', 'Reconnecting...'); setTimeout(connect, 2000); };
+  ws.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'state')  { state = msg; if (state.local_ip) localIp = state.local_ip; render(); }
+    if (msg.type === 'button') onButton(msg);
+    if (msg.type === 'log')    appendLog(msg.msg);
+  };
+  ws.onerror = () => ws.close();
+}
+
+function setStatus(cls, txt) {
+  const dot  = document.getElementById('status-dot');
+  const lbl  = document.getElementById('status-text');
+  dot.className = 'status-dot' + (cls ? ' ' + cls : '');
+  lbl.textContent = txt;
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────────
+function render() {
+  if (!state) return;
+  renderControllers();
+  renderMapping();
+  renderLights();
+  renderLog();
+  const active = state.active_buzzers || 0;
+  const n = state.devices.length;
+  setStatus(n ? 'ok' : 'warn', n ? `Connected (${active} buzzer${active!==1?'s':''} active)` : 'No device connected');
+}
+
+function renderControllers() {
+  const grid = document.getElementById('bz-grid');
+  if (!state.devices.length) {
+    grid.innerHTML = `<div class="bz-card unpaired" style="grid-column:1/-1;border-radius:12px;padding:40px;text-align:center;color:var(--muted)">No Buzz dongle detected — plug in your USB dongle</div>`;
+    return;
+  }
+  let html = '';
+  state.devices.forEach((dev, di) => {
+    for (let slot = 0; slot < SLOTS; slot++) {
+      const mapping = state.mapping[slot] || DEFAULT_MAPPING;
+      html += `<div class="bz-card" id="bzc-${di}-${slot}">
+        <div class="bz-label">Buzzer ${slot+1}</div>
+        <div class="buzz-circle" id="bzr-${di}-${slot}">Buzz!</div>
+        <div class="color-btns">
+          ${['Blue','Orange','Green','Yellow'].map(b => `
+            <div class="cbtn ${BTN_CLASSES[b]}" id="bz-${di}-${slot}-${b}">${b}</div>
+          `).join('')}
+        </div>
+        <div class="xbox-out" id="bzo-${di}-${slot}">no input</div>
+      </div>`;
+    }
+  });
+  grid.innerHTML = html;
+}
+
+function renderMapping() {
+  if (!state) return;
+  const grid = document.getElementById('map-grid');
+  let html = '';
+  for (let slot = 0; slot < SLOTS; slot++) {
+    const mapping = state.mapping[slot] || DEFAULT_MAPPING;
+    html += `<div class="map-card">
+      <div class="map-header">Buzzer ${slot+1}</div>
+      <div class="map-body">
+        ${BTNS.map(btn => `
+          <div class="map-row">
+            <button class="map-pill" style="background:${BTN_COLORS[btn]}">${btn}</button>
+            <span class="map-arrow">→</span>
+            <select class="map-select" id="ms-${slot}-${btn}" onchange="mapChanged()">
+              ${state.buttons.map(b => `<option${b===(mapping[btn]||DEFAULT_MAPPING[btn])?' selected':''}>${b}</option>`).join('')}
+            </select>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }
+  grid.innerHTML = html;
+}
+
+function renderLights() {
+  if (!state) return;
+  const card = document.getElementById('lt-card');
+  let rows = `<div class="lt-row">
+    <div class="lt-ind" id="lind-all"></div>
+    <span class="lt-label all">All buzzers</span>
+    <button class="btn-test btn-test-all" onclick="testAll()">Test all (3s)</button>
+  </div>`;
+  state.devices.forEach((dev, di) => {
+    for (let slot = 0; slot < SLOTS; slot++) {
+      const on = dev.lights && dev.lights[slot];
+      rows += `<div class="lt-row">
+        <div class="lt-ind${on?' on':''}" id="lind-${di}-${slot}"></div>
+        <span class="lt-label">${di+1}:${slot+1}</span>
+        <button class="btn-test" onclick="testLight(${di},${slot})">Test (3s)</button>
+      </div>`;
+    }
+  });
+  if (!state.devices.length) {
+    rows += `<div class="lt-row"><span class="lt-label unpaired">No devices connected</span></div>`;
+  }
+  card.innerHTML = rows;
+}
+
+function renderLog() {
+  if (!state || !state.logs) return;
+  const box = document.getElementById('log-box');
+  box.innerHTML = state.logs.map(formatLog).join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+function formatLog(line) {
+  const ts  = line.match(/^\[.*?\]/)?.[0] || '';
+  const msg = line.slice(ts.length + 1);
+  let cls = 'log-ok';
+  if (/Button DOWN|Button UP/.test(line)) cls = 'log-btn';
+  if (/API:/.test(line)) cls = 'log-api';
+  if (/CRASH|error|failed/i.test(line)) cls = 'log-err';
+  if (/Xbox controller/.test(line)) cls = 'log-api';
+  return `<div class="log-entry"><span class="log-t">${ts}</span> <span class="${cls}">${msg}</span></div>`;
+}
+
+function appendLog(line) {
+  const box = document.getElementById('log-box');
+  box.innerHTML += formatLog(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ── Button feedback ────────────────────────────────────────────────────────────
+function onButton(msg) {
+  if (!state) return;
+  const di   = state.devices.findIndex(d => d.path === msg.path);
+  if (di < 0) return;
+  const slot = msg.slot;
+  const btn  = msg.btn;
+  const on   = msg.pressed;
+  const mapping = state.mapping[slot] || DEFAULT_MAPPING;
+
+  if (btn === 'Red') {
+    const el = document.getElementById(`bzr-${di}-${slot}`);
+    if (el) el.classList.toggle('pressed', on);
+  } else {
+    const el = document.getElementById(`bz-${di}-${slot}-${btn}`);
+    if (el) el.classList.toggle('pressed', on);
+  }
+
+  const out = document.getElementById(`bzo-${di}-${slot}`);
+  if (out) {
+    if (on) {
+      out.textContent = `→ ${mapping[btn] || '?'} down`;
+      out.classList.add('active');
+    } else {
+      out.textContent = 'no input';
+      out.classList.remove('active');
+    }
+  }
+
+  const card = document.getElementById(`bzc-${di}-${slot}`);
+  if (card) card.classList.toggle('has-input', on);
+}
+
+// ── Mapping ────────────────────────────────────────────────────────────────────
+function mapChanged() {}
+
+function saveMapping() {
+  const mapping = {};
+  for (let slot = 0; slot < SLOTS; slot++) {
+    mapping[slot] = {};
+    BTNS.forEach(btn => {
+      const el = document.getElementById(`ms-${slot}-${btn}`);
+      if (el) mapping[slot][btn] = el.value;
+    });
+  }
+  fetch(API + '/api/mapping', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({mapping}),
+  });
+}
+
+function resetMapping() {
+  const mapping = {};
+  for (let slot = 0; slot < SLOTS; slot++) {
+    mapping[slot] = {...DEFAULT_MAPPING};
+  }
+  fetch(API + '/api/mapping', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({mapping}),
+  }).then(() => {
+    if (state) { state.mapping = mapping; renderMapping(); }
+  });
+}
+
+// ── Lights ─────────────────────────────────────────────────────────────────────
+function testLight(di, slot) {
+  const key = `${di}-${slot}`;
+  clearTimeout(lightTimers[key]);
+  if (!state || !state.devices[di]) return;
+  const path = state.devices[di].path;
+  setLightInd(di, slot, true);
+  fetch(API + '/api/light', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({path, slot, state: true}),
+  });
+  lightTimers[key] = setTimeout(() => {
+    setLightInd(di, slot, false);
+    fetch(API + '/api/light', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({path, slot, state: false}),
+    });
+  }, 3000);
+}
+
+function testAll() {
+  if (!state) return;
+  state.devices.forEach((_, di) => {
+    for (let slot = 0; slot < SLOTS; slot++) testLight(di, slot);
+  });
+}
+
+function setLightInd(di, slot, on) {
+  const ind = document.getElementById(`lind-${di}-${slot}`);
+  if (ind) ind.className = 'lt-ind' + (on ? ' on' : '');
+  const any = document.querySelectorAll('.lt-ind.on').length > 0;
+  const all = document.getElementById('lind-all');
+  if (all) all.className = 'lt-ind' + (any ? ' on' : '');
+}
+
+// ── QR Code ───────────────────────────────────────────────────────────────────
+function renderQR() {
+  const url = `http://${localIp}:7843/gamepad.html`;
+  document.getElementById('pad-url').textContent = url;
+  const container = document.getElementById('qr-container');
+  container.innerHTML = '';
+  if (window.QRCode) {
+    new QRCode(container, {text: url, width: 200, height: 200, colorDark: '#000', colorLight: '#fff'});
+  } else {
+    const img = document.createElement('img');
+    img.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
+    img.width = 200; img.height = 200; img.style.display = 'block';
+    container.appendChild(img);
+  }
+}
+
+function copyPadUrl() {
+  const url = `http://${localIp}:7843/gamepad.html`;
+  navigator.clipboard.writeText(url).catch(() => {});
+}
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    if (t.dataset.tab === 'pad') setTimeout(renderQR, 50);
+  });
+});
+
+// ── Installer popup ────────────────────────────────────────────────────────────
+function checkMissing() {
+  if (!state) return;
+  const missing = [...(state.missing || [])];
+  if (!state.vigem_ok) missing.push('vigem');
+  if (!missing.length) return;
+  if (document.getElementById('popup').classList.contains('show')) return;
+  const LABELS = {
+    pybuzzers:  {name:'pybuzzers',       sub:'Buzz controller driver'},
+    vgamepad:   {name:'vgamepad',        sub:'Virtual Xbox controller output'},
+    pywebview:  {name:'pywebview',       sub:'Native app window'},
+    websockets: {name:'websockets',      sub:'Real-time communication'},
+    vigem:      {name:'ViGEmBus driver', sub:'Required for virtual Xbox controllers'},
+  };
+  installQueue = missing;
+  const list = document.getElementById('dep-list');
+  list.innerHTML = missing.map(pkg => {
+    const l = LABELS[pkg] || {name:pkg, sub:''};
+    return `<div class="dep-row">
+      <div class="dep-icon miss">✗</div>
+      <div><div class="dep-name">${l.name}</div><div class="dep-sub">${l.sub}</div></div>
+      <span class="dep-status st-miss" id="ds-${pkg}">Missing</span>
+    </div>`;
+  }).join('');
+  document.getElementById('popup').classList.add('show');
+}
+
+function closePopup() {
+  document.getElementById('popup').classList.remove('show');
+}
+
+const INSTALL_STEPS = {
+  pybuzzers:  [{l:'Installing pybuzzers...',  s:'Downloading package...', p:'50%'},{l:'Installing pybuzzers...',  s:'Done.', p:'100%'}],
+  vgamepad:   [{l:'Installing vgamepad...',   s:'Downloading package...', p:'50%'},{l:'Installing vgamepad...',   s:'Done.', p:'100%'}],
+  pywebview:  [{l:'Installing pywebview...',  s:'Downloading package...', p:'50%'},{l:'Installing pywebview...',  s:'Done.', p:'100%'}],
+  websockets: [{l:'Installing websockets...', s:'Downloading package...', p:'50%'},{l:'Installing websockets...',  s:'Done.', p:'100%'}],
+  vigem:      [{l:'Downloading ViGEmBus...',  s:'Fetching latest release...', p:'40%'},{l:'Installing ViGEmBus...', s:'Running installer...', p:'80%'},{l:'ViGEmBus installed.', s:'Done.', p:'100%'}],
+};
+
+function startInstall() {
+  document.getElementById('btn-install').style.display = 'none';
+  document.getElementById('btn-skip').style.display    = 'none';
+  document.getElementById('prog-area').style.display   = 'block';
+  installIdx = 0;
+  installNext();
+}
+
+function installNext() {
+  if (installIdx >= installQueue.length) {
+    document.getElementById('prog-label').textContent  = 'All done!';
+    document.getElementById('prog-status').textContent = 'Restart the app to apply changes.';
+    document.getElementById('prog-fill').style.width   = '100%';
+    document.getElementById('btn-done').style.display  = 'block';
+    return;
+  }
+  const pkg   = installQueue[installIdx];
+  const steps = INSTALL_STEPS[pkg] || [{l:`Installing ${pkg}...`, s:'Please wait...', p:'100%'}];
+  fetch(API + '/api/install', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({package: pkg}),
+  });
+  let si = 0;
+  function nextStep() {
+    if (si >= steps.length) {
+      const ds = document.getElementById(`ds-${pkg}`);
+      if (ds) { ds.textContent = 'Installed'; ds.className = 'dep-status st-ok'; }
+      installIdx++;
+      setTimeout(installNext, 400);
+      return;
+    }
+    const s = steps[si];
+    document.getElementById('prog-label').textContent  = s.l;
+    document.getElementById('prog-status').textContent = s.s;
+    document.getElementById('prog-fill').style.width   = s.p;
+    si++;
+    setTimeout(nextStep, 1200);
+  }
+  nextStep();
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────────
+connect();
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</body>
+</html>
